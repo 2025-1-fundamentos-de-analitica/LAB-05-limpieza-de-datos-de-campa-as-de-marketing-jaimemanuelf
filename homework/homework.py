@@ -5,6 +5,11 @@ Escriba el codigo que ejecute la accion solicitada.
 # pylint: disable=import-outside-toplevel
 
 
+import pandas as pd
+import os
+import zipfile
+import io
+
 def clean_campaign_data():
     """
     En esta tarea se le pide que limpie los datos de una campaña de
@@ -45,13 +50,64 @@ def clean_campaign_data():
     - client_id
     - const_price_idx
     - eurobor_three_months
-
-
-
     """
+    # Crear directorio de salida si no existe
+# pylint: disable=import-outside-toplevel
 
-    return
-
-
+    os.makedirs('files/output', exist_ok=True)
+    
+    input_path = 'files/input'
+    all_data = []
+    
+    for filename in os.listdir(input_path):
+        if filename.endswith('.zip'):
+            file_path = os.path.join(input_path, filename)
+            
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                for zip_info in zip_ref.infolist():
+                    if zip_info.filename.endswith('.csv'):
+                        with zip_ref.open(zip_info) as csv_file:
+                            df = pd.read_csv(io.BytesIO(csv_file.read()))
+                            all_data.append(df)
+    
+    if all_data:
+        combined_data = pd.concat(all_data, ignore_index=True)
+        
+        client_df = pd.DataFrame()
+        client_df['client_id'] = combined_data['client_id']
+        client_df['age'] = combined_data['age']
+        client_df['job'] = combined_data['job'].str.replace('.', '', regex=False).str.replace('-', '_', regex=False)
+        client_df['marital'] = combined_data['marital']
+        client_df['education'] = combined_data['education'].str.replace('.', '_', regex=False)
+        client_df['education'] = client_df['education'].replace('unknown', pd.NA)
+        client_df['credit_default'] = combined_data['credit_default'].apply(lambda x: 1 if x == 'yes' else 0)
+        client_df['mortgage'] = combined_data['mortgage'].apply(lambda x: 1 if x == 'yes' else 0)
+        
+        campaign_df = pd.DataFrame()
+        campaign_df['client_id'] = combined_data['client_id']
+        campaign_df['number_contacts'] = combined_data['number_contacts']
+        campaign_df['contact_duration'] = combined_data['contact_duration']
+        campaign_df['previous_campaign_contacts'] = combined_data['previous_campaign_contacts']
+        campaign_df['previous_outcome'] = combined_data['previous_outcome'].apply(lambda x: 1 if x == 'success' else 0)
+        campaign_df['campaign_outcome'] = combined_data['campaign_outcome'].apply(lambda x: 1 if x == 'yes' else 0)
+        
+        month_map = {
+            'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 
+            'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 
+            'nov': '11', 'dec': '12'
+        }
+        
+        months_numeric = combined_data['month'].str.lower().map(month_map)
+        campaign_df['last_contact_date'] = '2022-' + months_numeric + '-' + combined_data['day'].astype(str).str.zfill(2)
+        
+        economics_df = pd.DataFrame()
+        economics_df['client_id'] = combined_data['client_id']
+        economics_df['cons_price_idx'] = combined_data['cons_price_idx']
+        economics_df['euribor_three_months'] = combined_data['euribor_three_months']
+        
+        client_df.to_csv('files/output/client.csv', index=False)
+        campaign_df.to_csv('files/output/campaign.csv', index=False)
+        economics_df.to_csv('files/output/economics.csv', index=False)
+        
 if __name__ == "__main__":
     clean_campaign_data()
